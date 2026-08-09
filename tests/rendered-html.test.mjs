@@ -22,17 +22,17 @@ async function render() {
   );
 }
 
-test("server-renders the city afterimage product", async () => {
+test("server-renders the living-circle product", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>城市潜像｜个人城市意象生成器<\/title>/i);
-  assert.match(html, /一座城市，/);
-  assert.match(html, /先在你/);
-  assert.match(html, /开始显影/);
-  assert.match(html, /直接体验示例/);
+  assert.match(html, /<title>城市潜像｜住进我的一天<\/title>/i);
+  assert.match(html, /先别选房/);
+  assert.match(html, /先试住/);
+  assert.match(html, /进入试住/);
+  assert.match(html, /观看完整示例/);
   assert.match(html, /武汉/);
   assert.doesNotMatch(html, /codex-preview/);
   assert.doesNotMatch(html, /Your site is taking shape/);
