@@ -9,9 +9,9 @@ export async function generateMetadata(): Promise<Metadata> {
     requestHeaders.get("x-forwarded-proto") ||
     (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
-  const title = "城市潜像｜住进我的一天";
+  const title = "City Afterimage / 城市潜像｜Explainable Relocation Agent";
   const description =
-    "选择职业与生活片段，先生成你的生活潜像，再找到能承接普通一天的武汉生活圈。";
+    "Turn the day you want to repeat into evidence-backed, explainable Wuhan neighborhood decisions — and replan when you disagree.";
 
   return {
     title,
@@ -30,7 +30,7 @@ export async function generateMetadata(): Promise<Metadata> {
           url: `${origin}/og.png`,
           width: 1200,
           height: 630,
-          alt: "城市潜像——住进我的一天，武汉生活圈推荐",
+          alt: "City Afterimage — an explainable Wuhan living-circle recommendation agent",
         },
       ],
     },

@@ -28,11 +28,12 @@ test("server-renders the living-circle product", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>城市潜像｜住进我的一天<\/title>/i);
+  assert.match(html, /<title>City Afterimage \/ 城市潜像｜Explainable Relocation Agent<\/title>/i);
   assert.match(html, /先别选房/);
   assert.match(html, /先试住/);
   assert.match(html, /进入试住/);
-  assert.match(html, /观看完整示例/);
+  assert.match(html, /90 秒评委模式/);
+  assert.match(html, /JUDGE DEMO/);
   assert.match(html, /武汉/);
   assert.doesNotMatch(html, /codex-preview/);
   assert.doesNotMatch(html, /Your site is taking shape/);

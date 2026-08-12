@@ -41,3 +41,38 @@ test("the result map exposes real map providers and honest fallback states", asy
   assert.match(source, /OpenStreetMap 实时开放路网与设施/);
   assert.match(source, /不伪造精确点位/);
 });
+
+test("judge mode, evidence passport and visible replanning stay in the competition build", async () => {
+  const page = await import("node:fs/promises").then((fs) =>
+    fs.readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  );
+  const replan = await import("node:fs/promises").then((fs) =>
+    fs.readFile(new URL("../lib/replan.ts", import.meta.url), "utf8"),
+  );
+  assert.match(page, /URLSearchParams\(window\.location\.search\)\.get\("judge"\) !== "1"/);
+  assert.match(page, /EVIDENCE PASSPORT/);
+  assert.match(page, /通勤再收紧 5 分钟/);
+  assert.match(page, /内置演示坐标/);
+  assert.match(replan, /buildReplanDelta/);
+  assert.match(replan, /changedRoles/);
+});
+
+test("Huawei aliases resolve before generic offline hashing", async () => {
+  const source = await import("node:fs/promises").then((fs) =>
+    fs.readFile(new URL("../app/api/places/route.ts", import.meta.url), "utf8"),
+  );
+  assert.match(source, /华为武汉研究所/);
+  assert.match(source, /华为武汉研发基地/);
+  assert.match(source, /verifiedFixtureMatches/);
+  assert.match(source, /verified\.length \? verified : FIXTURE_SEARCH_PLACES/);
+});
+
+test("public copy does not claim unauthorized platform integrations", async () => {
+  const read = (path) => import("node:fs/promises").then((fs) =>
+    fs.readFile(new URL(path, import.meta.url), "utf8"),
+  );
+  const publicCopy = `${await read("../README.md")}\n${await read("../OPENARENA.md")}`;
+  assert.match(publicCopy, /does \*\*not\*\* scrape or claim real-time access/i);
+  assert.match(publicCopy, /Do not use:[\s\S]*scientifically proven perfect neighborhood/i);
+  assert.match(publicCopy, /Do not use:[\s\S]*real-time all-platform data/i);
+});

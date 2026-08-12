@@ -1,23 +1,151 @@
-# 城市潜像 · 住进我的一天
+# City Afterimage / 城市潜像
 
-一个面向异地入职青年的武汉生活圈推荐 Demo。
+> **City Afterimage turns the day you want to repeat into explainable neighborhood decisions.**
+>
+> 城市潜像把你想重复的一天，转译成可解释的生活圈选择。
 
-用户不需要填写开放问卷，而是选择职业英雄、校准真实班表、放置公司与生活锚点，再通过场景二选一和“一天剪辑”表达偏好。系统先生成可校正的生活潜像，随后推荐三个具有不同意义的武汉生活圈，并模拟普通周中与周末。
+City Afterimage is an explainable relocation decision agent for people starting a life in an unfamiliar city. Instead of asking users to describe an “ideal neighborhood,” it lets them choose between concrete life scenes, edit the resulting lifestyle profile before any place name is revealed, and then connects that profile to map evidence and three distinct Wuhan living-circle recommendations.
 
-> 先别选房，先看看你想把怎样的一天放进武汉。
+[**Live demo**](https://city-afterimage-lab.bigdraw123.chatgpt.site/) · [**90-second judge mode**](https://city-afterimage-lab.bigdraw123.chatgpt.site/?judge=1) · [OpenArena submission kit](./OPENARENA.md) · [中文说明](#中文说明)
 
-## 快速启动
+![City Afterimage visual preview](./public/og.png)
 
-需要 Node.js 22.13 或更高版本。
+## The problem
+
+Relocation tools usually start with listings, rent, or abstract preference forms. But the decision people actually live with is more ordinary:
+
+> After work on a Wednesday night, can the rest of my day still happen?
+
+City Afterimage starts from that repeatable day. It combines real constraints—office location, schedule, commute ceiling, mobility, and personal anchors—with forced choices about food, quiet, social distance, urban texture, nature, and weekend range.
+
+The product does **not** claim to find an objectively perfect home. It produces an **evidence-backed, explainable decision** that users can inspect, disagree with, and replan.
+
+## 90-second judge path
+
+Open [`?judge=1`](https://city-afterimage-lab.bigdraw123.chatgpt.site/?judge=1). The preloaded case is a design/content worker near Guanggu Software Park, leaving at 19:30 with a 40-minute commute ceiling.
+
+1. **Recognize the life profile before seeing place names.** Read and confirm the generated “afterimage.”
+2. **Reveal three different decisions.** Inspect the map, evidence passport, recommendation reasons, trade-off, and simulated weekday/weekend.
+3. **Tighten commute by five minutes.** Watch `40 → 35 min`, the affected recommendation role, supporting evidence, and the day plan replan together.
+
+This path demonstrates the full loop without asking a judge to complete the 3–4 minute onboarding.
+
+## The agent loop
+
+```text
+Real constraints + scene choices
+            ↓
+Lifestyle afterimage before place-name reveal
+            ↓
+Candidate living circles + route/facility evidence
+            ↓
+Three decision roles: best fit / least friction / growth self
+            ↓
+Weekday and weekend simulation + explicit trade-off
+            ↓
+User disagreement or constraint change
+            ↓
+Immediate re-ranking, evidence update, and day replan
+```
+
+The current agent is deliberately structured and deterministic: it can explain which input and evidence changed a score. An LLM may polish confirmed facts through the reserved narration boundary, but it is not allowed to invent places, distances, facilities, or travel times. The complete demo works without an LLM key.
+
+## What is implemented
+
+- Six “title + profession” entry cards; profession only supplies an editable work-schedule default and never acts as a personality score.
+- Wuhan address search, stable demo presets, and verified aliases for Huawei Wuhan Research Institute in the Future Science and Technology City direction.
+- Five core scene duels plus one adaptive duel; every question supports a clear A/B decision or skip.
+- “Edit a day” interactions for three weekday-evening and three weekend-morning priorities.
+- A six-axis lifestyle afterimage: convenience, quiet, social energy, urban texture, nature, and weekend radius.
+- 22 curated Wuhan living-circle seeds represented as flexible ~1.5 km daily-life radii, not administrative boundaries.
+- Three non-duplicate result roles: **Best fit**, **Least friction**, and **The self you may grow into**.
+- Explainable ranking across commute, facilities/mobility, rhythm, social/night needs, texture/nature, and personal anchors.
+- Real-coordinate map centered on each recommendation, with filterable metro, bus, park, medical, grocery/market, and food facilities.
+- An evidence passport that distinguishes user evidence, address source, commute source, facility source, and recommendation model.
+- “Like / Not me” evidence feedback plus quick replans for commute, nature, and late-night needs.
+- A structured weekday and weekend simulation grounded in the current recommendation evidence.
+- A local 1080 × 1440 share cover that never includes the exact office address.
+- Desktop, 390 px mobile, keyboard focus, reduced-motion, loading, and map-failure states.
+- A local cat guide that reacts to choices, explains trade-offs, and invites another round without turning the product into a chat toy.
+
+## Evidence passport and honest data states
+
+Every result distinguishes where its evidence came from:
+
+| Evidence | Live state | Fallback state |
+| --- | --- | --- |
+| User intent | Scene choices, edited day, commute ceiling | Same local session data |
+| Address | Amap Web Service geocoding | Verified demo coordinates or clearly marked stable demo position |
+| Commute | Amap route result | Model estimate, explicitly labelled as an estimate |
+| Nearby facilities | Amap POI or OpenStreetMap/Overpass | Curated demo list; unverified facility coordinates are not plotted |
+| Recommendation | Structured preferences + curated living-circle features | Same transparent ranking model |
+
+The interface displays the active state. It never describes estimated commuting as a live route, nor demo facilities as verified real-time POIs.
+
+### Not integrated
+
+This repository does **not** scrape or claim real-time access to Dianping, Meituan, Xiaohongshu, rent listings, or social-media popularity. Those platforms are future partner-adapter boundaries only. Activity evidence should first come from official organizers/venues, dated manual curation, or a link deliberately supplied by the user.
+
+## Recommendation model
+
+Default decision weights:
+
+| Dimension | Weight |
+| --- | ---: |
+| Commute fit | 35% |
+| Facilities and mobility | 25% |
+| Daily rhythm | 15% |
+| Social and late-night needs | 10% |
+| Nature and urban texture | 10% |
+| Personal anchors | 5% |
+
+Exceeding the user’s commute ceiling triggers a hard penalty. The three result roles are selected with different objectives rather than displaying the top three scores under one formula:
+
+- **Best fit / 最合拍** — highest overall match.
+- **Least friction / 最省力** — lowest commute and daily-life friction.
+- **Growth self / 最可能长成的你** — still feasible, but closer to the user’s aspirational nature, exploration, or urban-texture preferences.
+
+## Privacy
+
+- Office address, optional anchors, and preferences stay in page memory and disappear on refresh.
+- In live address mode, a search query is sent to Amap; the interface discloses this before use.
+- Without an Amap key, the result map may request public road/facility data from OpenStreetMap and Overpass and shows the active attribution.
+- Exact office and private-anchor addresses are excluded from the share image.
+- No user account, tracking profile, rental transaction, or cloud history is required.
+- The output is a shortlist for exploration, not a safety, medical-access, pricing, availability, or signing guarantee. Users should verify a neighborhood in person before moving.
+
+## Run locally
+
+Requirements: Node.js **22.13+** and npm.
 
 ```bash
+git clone https://github.com/leinstein908/city-afterimage.git
+cd city-afterimage
 npm install
 npm run dev
 ```
 
-打开终端显示的本地地址。首次演示可直接点击首页「观看完整示例」，也可以用 3–4 分钟走完完整流程。
+Open the local URL printed by the terminal. Use `/?judge=1` for the preloaded judge path or complete the full 3–4 minute experience from the home page.
 
-生产构建与测试：
+### Optional Amap configuration
+
+The complete experience runs in fixture/open-data mode without a key. To enable Amap address, route, and POI requests:
+
+```bash
+cp .env.example .env.local
+```
+
+Then add a server-side Web Service key:
+
+```text
+AMAP_WEB_SERVICE_KEY=your_server_side_web_service_key
+```
+
+Never commit `.env.local` or a production key.
+
+### Build and verify
+
+Run the quality gates serially:
 
 ```bash
 npm run build
@@ -25,100 +153,18 @@ npm test
 npm run lint
 ```
 
-## 已实现体验
+`npm test` also performs a production build before the Node test suite.
 
-- 六种“称号＋职业”英雄入口，默认班表必须由用户校准
-- 任意武汉地址搜索，以及光谷软件园、武汉天地、中南路三个稳定预设
-- 最多两个可选生活锚点，不要求填写真实姓名
-- 五组核心生活场景和一组偏好加试，全部使用二选一或跳过
-- 工作日晚间和周末上午各选三个片段
-- 六维生活潜像：省心密度、安静余量、人间热度、城市纹理、自然呼吸、周末半径
-- 22 个武汉生活圈种子与约 1.5 km 柔性日常半径，新增未来科技城，并校正“华为武汉研究所 / 武汉华为研究所 / 华为武汉研发基地”等离线别名
-- 最合拍、最省力、最可能长成的你三种差异化结果
-- 通勤、设施、生活节奏、社会关系、肌理自然和个人锚点的可解释评分
-- 结果地图以生活圈真实坐标为中心：有高德 Key 时读取高德周边设施和静态路网；无 Key 时使用 OpenStreetMap 路网，并明确标示开放数据或名称级演示数据
-- 地铁、公交、公园、医疗、商超菜场和餐饮可按类别筛选；没有核验坐标的演示设施不放上地图
-- 证据卡使用“通 / 夜 / 省 / 绿”等视觉指标和强度条，点“喜欢 / 不像我”会立即调整画像并重算
-- 猫猫观察员“潜潜”贯穿答题和结果页，每次选择后回应，并指出推荐的妥协点
-- 结果后可继续收紧通勤、提高自然需求或加强晚归生活权重，不必重新答完整流程
-- 每个生活圈生成一个普通工作日和周末日程
-- 浏览器本地生成 1080 × 1440 私人城市杂志封面
-- 手机、桌面、投屏、键盘操作和减少动态效果适配
-
-## 视觉方向
-
-当前版本采用“私人城市生活特刊”方向：保留暖纸色、宋体大标题、河流蓝、珊瑚红与编辑网格，但将装饰性游戏界面收束为可追溯的生活证据。
-
-- 十二种场景插画分别表达夜间餐饮、树荫、地铁、独处、老街、水岸等真实生活差异；
-- 生活潜像使用可直接判断的生活陈述，不再要求用户理解抽象分数与滑杆；
-- 推荐结果以“高度合拍 / 合拍 / 有潜力”等定性判断呈现，具体依据下沉到通勤、生活设施和真实地点；
-- 结果地图不再使用汉口 / 武昌 / 汉阳抽象关系线，而是展示真实道路底图、生活圈柔性半径与可核验设施；
-- 当前猫猫资产位于 `public/cat-guide-potential.png`，使用用户确认的好奇举爪黑白猫形象；此前版本继续保留在 `public/cat-guide-v2.png` 与 `public/cat-guide.png` 供风格追溯；
-- 390px 手机端使用横向职业档案与同屏 A/B 场景，保留比较、反馈和揭晓结构。
-
-## 数据模式
-
-项目默认使用 `fixture` 模式，比赛现场没有密钥、网络不稳或接口额度不足时仍能跑通完整体验。
-
-配置高德 Web 服务密钥后，地址搜索和首轮推荐的通勤路线会自动进入 `live` 模式：
-
-```bash
-cp .env.example .env.local
-```
-
-然后填写：
+## API boundaries
 
 ```text
-AMAP_WEB_SERVICE_KEY=你的高德 Web 服务密钥
-```
-
-如果没有密钥：
-
-- 华为武汉研究所等已校验地点与已知武汉生活圈会匹配内置坐标；
-- 其他地址会生成武汉范围内的稳定演示坐标；
-- 地图优先尝试 OpenStreetMap 实时开放路网与设施；网络失败时回到本地设施清单；
-- 界面会明确显示“公开地图校验 / OpenStreetMap / 本地演示设施”，不会伪装成高德实时路线或伪造设施点位。
-
-地图数据状态：
-
-- `高德实时路网与周边设施`：配置 `AMAP_WEB_SERVICE_KEY` 后的实时查询；
-- `OpenStreetMap 实时开放路网与设施`：无高德 Key 时的免密钥开放数据；
-- `开放路网底图 · 本地演示设施`：周边接口失败时的降级，只有经过公开地图校验的设施才显示坐标；
-- 通勤处只有明确写着“高德路线”才是实时路线，其他均写明“模型估算”。
-
-## 推荐逻辑
-
-每个生活选择会作用于六个生活轴。职业只提供可编辑的工作时间默认值，不直接给性格加分。
-
-默认综合权重：
-
-| 维度 | 权重 |
-| --- | ---: |
-| 通勤匹配 | 35% |
-| 设施与移动方式 | 25% |
-| 生活节奏 | 15% |
-| 社交距离 | 10% |
-| 城市肌理与自然 | 10% |
-| 个人锚点 | 5% |
-
-超过用户通勤上限会触发硬性惩罚。三个结果不是简单取前三名：
-
-- **最合拍**：综合匹配最高；
-- **最省力**：通勤和日常设施摩擦最低；
-- **最可能长成的你**：现实仍可行，同时具有更强的探索、自然或城市纹理。
-
-日常模拟只使用推荐结果内已有的路线估算和生活圈 POI 证据。`POST /api/narrate` 当前使用本地模板，后续可以在服务端接入 LLM，但不得向模型发送公司精确地址。
-
-## 接口
-
-```text
-GET  /api/places?q=地址或地点
+GET  /api/places?q=address-or-place
 POST /api/living-circles/recommend
 POST /api/living-circles/feedback
 POST /api/narrate
 ```
 
-主要类型位于 `lib/living-types.ts`：
+Primary types live in `lib/living-types.ts`:
 
 ```text
 UserProfile
@@ -129,35 +175,55 @@ DaySimulation
 FeedbackAdjustment
 ```
 
-## 项目结构
+The current public API is intentionally small. Replan deltas are calculated internally so the demo can make a before/after decision visible without exposing unstable implementation details.
+
+## Project map
 
 ```text
-app/page.tsx                         单页试住流程与结果交互
-app/globals.css                      私人城市生活特刊视觉、响应式与动效
-app/api/places                       地址搜索与离线降级
-app/api/living-circles/recommend     推荐接口与可选实时通勤
-app/api/living-circles/feedback      反馈重算接口
-app/api/map/context                  高德 / OSM 周边设施与数据状态
-app/api/map/static                   高德静态路网代理（有 Key 时）
-app/api/narrate                      本地叙事模板与 LLM 接口位
-lib/living-data.ts                   职业、场景、日程卡和 22 个生活圈
-lib/map-data.ts                      坐标转换、设施分类、实时地图与降级逻辑
-lib/recommender.ts                   画像、评分、解释与日常模拟
-lib/living-export.ts                 私人杂志封面生成
-HACKATHON.md                         3 分钟路演稿与评委问答
+app/page.tsx                         Single-page trial-living flow and result interactions
+app/globals.css                      Editorial visual system, responsive states, motion
+app/api/places                       Address search and verified offline fallbacks
+app/api/living-circles/recommend     Recommendation and optional live commute
+app/api/living-circles/feedback      Evidence feedback and re-ranking
+app/api/map/context                  Amap / OSM facilities and source state
+app/api/map/static                   Amap static-road proxy when configured
+app/api/narrate                      Local narration template and optional LLM boundary
+lib/living-data.ts                   Professions, scenes, activities, 22 living circles
+lib/map-data.ts                      Coordinate, facility, provider, and fallback logic
+lib/recommender.ts                   Profile, ranking, explanation, and day simulation
+lib/living-export.ts                 Local private-magazine cover generation
+OPENARENA.md                         Submission copy and English demo script
+HACKATHON.md                         Chinese 3-minute pitch and FAQ
 ```
 
-## 隐私与产品边界
+## OpenArena 2026
 
-- 公司地址、生活锚点和偏好只保存在页面内存中，刷新即清除。
-- 使用实时地址搜索时，查询会发送给高德地图，界面中有明确提示。
-- 无高德 Key 时，结果页可能向 OpenStreetMap / Overpass 请求公开路网和设施；页面会显示数据来源与版权归属。
-- 分享封面不会包含公司精确地址或用户填写的私人锚点地址。
-- 本产品推荐的是生活圈探索方向，不提供房源、租金、签约或价格承诺。
-- 生活圈是约 1.5 km 的柔性日常活动半径，不是行政边界。
-- 内置设施数据用于 Demo，不代替搬家前的实地踩点与实时核验。
-- 公开地图的 POI 可能有延迟、缺失或名称差异；Demo 不显示实时租金、房源余量和签约承诺。
+- **Project:** City Afterimage / 城市潜像
+- **Primary track:** OPC / Super Individuals
+- **Category:** Agent (if a category is required)
+- **Submission description:** An explainable relocation decision agent that turns real-life constraints and the day a person wants to repeat into three Wuhan living-circle recommendations, then replans when the user disagrees.
 
-## 当前交付状态
+The OPC story is not “one person made many screens.” One creator and AI collaborators completed product framing, interaction and visual design, structured recommendation logic, map integration, testing, and deployment—giving one relocating person a capability that normally requires a local guide, an agent, and a data analyst working together.
 
-本目录是从原 Work 项目安全复制出的正式项目，保留 Git 历史与 Sites 托管绑定。原 Work 项目未被移动或修改。公开版本在本地验收并获得确认前不会更新。
+See [OPENARENA.md](./OPENARENA.md) for paste-ready form copy, the 90-second English demo, claims to avoid, and the post-deadline roadmap.
+
+## 中文说明
+
+城市潜像是一款面向异地入职者的**可解释迁居决策 Agent**。它不让用户填写高门槛开放问卷，也不从房源开始；用户只需校准真实班表、通勤底线，并在具体生活场景中做选择。系统会先在隐藏地名的情况下生成一段可修改的“生活潜像”，再把它连接到武汉地图证据、三个不同角色的生活圈，以及普通工作日和周末的模拟。
+
+推荐不是“科学证明的最佳住处”，而是一份**有证据支撑、可反驳、能即时重规划的决策**。结果会区分高德实时数据、OpenStreetMap 开放数据、已核验演示坐标与模型估算；未接入大众点评、美团、小红书实时数据，也不抓取这些平台内容。
+
+最快体验方式是打开 [90 秒评委模式](https://city-afterimage-lab.bigdraw123.chatgpt.site/?judge=1)：先确认不含地名的生活判断，再查看地图、证据护照和普通一天，最后把通勤上限从 40 分钟收紧到 35 分钟，观察推荐角色、证据和日程一起变化。
+
+本地运行：
+
+```bash
+npm install
+npm run dev
+```
+
+项目默认可在无地图 Key、无 LLM Key 的情况下完整运行。地址与偏好只保存在页面内存；分享封面不包含精确公司地址。当前结果用于缩小实地踩点范围，不替代搬家前的路线、设施、房租与安全核验。
+
+## License
+
+[MIT](./LICENSE)

@@ -10,6 +10,7 @@ import {
 } from "../lib/living-data";
 import { FACILITY_FILTERS } from "../lib/map-data";
 import { applyFeedback, recommendLivingCircles } from "../lib/recommender";
+import { buildReplanDelta } from "../lib/replan";
 import { shareLivingCover } from "../lib/living-export";
 import type {
   FeedbackAdjustment,
@@ -24,6 +25,7 @@ import type {
   RecommendationResult,
   UserProfile,
 } from "../lib/living-types";
+import type { QuickTuneKind, ReplanDelta } from "../lib/replan";
 
 type Screen =
   | "intro"
@@ -46,6 +48,20 @@ function freshProfile(): UserProfile {
     sceneChoices: [],
     weekdayPriorities: [],
     weekendPriorities: [],
+    axisAdjustments: {},
+  };
+}
+
+function judgeProfile(): UserProfile {
+  const hero = PROFESSION_HEROES.find((item) => item.id === "design") ?? INITIAL_HERO;
+  return {
+    profession: hero.id,
+    workPattern: { ...hero.defaultWork, endTime: "19:30", maxCommuteMinutes: 40 },
+    officeLocation: PRESET_PLACES[0],
+    optionalAnchors: [{ id: "judge-anchor", label: "常见的朋友", place: PRESET_PLACES[2] }],
+    sceneChoices: SCENE_DUELS.map((scene, index) => ({ sceneId: scene.id, optionId: scene.options[index % 2].id })),
+    weekdayPriorities: ["late-meal", "walk-home", "see-friend"],
+    weekendPriorities: ["slow-breakfast", "park", "exhibition"],
     axisAdjustments: {},
   };
 }
@@ -83,7 +99,7 @@ function CatCompanion({
   );
 }
 
-function ShellHeader({ screen, onReset }: { screen: Screen; onReset: () => void }) {
+function ShellHeader({ screen, judgeMode, onReset }: { screen: Screen; judgeMode: boolean; onReset: () => void }) {
   const active = CHAPTERS.findIndex((chapter) => chapter.screens.includes(screen as never));
   return (
     <header className="site-header">
@@ -99,6 +115,7 @@ function ShellHeader({ screen, onReset }: { screen: Screen; onReset: () => void 
         </nav>
       ) : null}
       <div className="header-side">
+        {judgeMode ? <span className="judge-badge">JUDGE · 90 SEC</span> : null}
         <span className="privacy"><i />刷新即清除</span>
         {screen !== "intro" ? <button className="link-button" onClick={onReset}>重新开始</button> : null}
       </div>
@@ -111,14 +128,14 @@ function Intro({ onStart, onDemo }: { onStart: () => void; onDemo: () => void })
     <main className="intro-screen">
       <div className="intro-grid">
         <section className="intro-copy">
-          <p className="issue-line"><span>武汉生活实验 · 01</span><span>约 3 分钟</span></p>
+          <p className="issue-line"><span>武汉生活实验 · 01</span><span>EXPLAINABLE RELOCATION AGENT</span></p>
           <h1>先别选房，<br />先试住<span>一天。</span></h1>
           <p className="intro-lead">
             工作把你带到武汉，生活应该把你留在哪里？不用填长问卷，做几次真实取舍，让适合你的生活圈自己显影。
           </p>
           <div className="intro-actions">
             <button className="primary-button" onClick={onStart}>进入试住 <span>↗</span></button>
-            <button className="ghost-button" onClick={onDemo}>观看完整示例</button>
+            <button className="ghost-button judge-entry" onClick={onDemo}><b>90 秒评委模式</b><small>JUDGE DEMO →</small></button>
           </div>
           <div className="intro-promises">
             <span>不是房源广告</span><span>不保存地址</span><span>结果可校正</span>
@@ -375,16 +392,19 @@ function EditDayStep({
 
 function MirrorStep({
   result,
+  judgeMode,
   onAdjust,
   onBack,
   onReveal,
 }: {
   result: RecommendationResult;
+  judgeMode: boolean;
   onAdjust: (axis: LifestyleAxis, delta: number) => void;
   onBack: () => void;
   onReveal: () => void;
 }) {
   return <main className="mirror-page">
+    {judgeMode ? <section className="judge-guide" aria-label="Judge mode step one"><b>JUDGE MODE · STEP 1 / 3</b><span>Read the life profile before any neighborhood name is revealed.</span><p>先判断“这像不像我”，避免被熟悉地名反向影响选择。</p></section> : null}
     <div className="mirror-eyebrow">地点揭晓之前 / 先审一遍这份生活初稿</div>
     <section className="mirror-card">
       <div className="mirror-signal"><i />{result.afterimage.evidence[0]}</div>
@@ -403,7 +423,7 @@ function MirrorStep({
       <div className="constraint-row"><b>现实底线</b>{result.afterimage.hardConstraints.map((item) => <span key={item}>{item}</span>)}</div>
     </section>
     <p className="mirror-help">不用修改参数。哪句话不成立，就直接告诉我们“不像我”。确认之后，武汉地名才会出现。</p>
-    <div className="mirror-actions"><button className="back-button" onClick={onBack}>← 再想想</button><button className="primary-button" onClick={onReveal}>确认，这是我 <span>开始显影 ↗</span></button></div>
+    <div className="mirror-actions"><button className="back-button" onClick={onBack}>← 再想想</button><button className="primary-button" onClick={onReveal}>{judgeMode ? "揭晓三个生活圈" : "确认，这是我"} <span>{judgeMode ? "REVEAL →" : "开始显影 ↗"}</span></button></div>
   </main>;
 }
 
@@ -463,7 +483,9 @@ function facilityMark(category: FacilityCategory) {
   return FACILITY_FILTERS.find((item) => item.id === category)?.mark ?? "点";
 }
 
-function RealLifeMap({ active }: { active: Recommendation }) {
+type MapEvidenceStatus = { context: MapContext | null; loading: boolean; failed: boolean };
+
+function RealLifeMap({ active, onStatus }: { active: Recommendation; onStatus?: (status: MapEvidenceStatus) => void }) {
   const [contextState, setContextState] = useState<{ circleId: string; value: MapContext | null; failed: boolean } | null>(null);
   const [category, setCategory] = useState<FacilityCategory | "all">("all");
   const [zoom, setZoom] = useState(15);
@@ -471,15 +493,26 @@ function RealLifeMap({ active }: { active: Recommendation }) {
 
   useEffect(() => {
     let current = true;
+    onStatus?.({ context: null, loading: true, failed: false });
     fetch(`/api/map/context?circleId=${encodeURIComponent(active.circle.id)}`)
       .then((response) => {
         if (!response.ok) throw new Error("map context unavailable");
         return response.json() as Promise<MapContext>;
       })
-      .then((payload) => { if (current) setContextState({ circleId: active.circle.id, value: payload, failed: false }); })
-      .catch(() => { if (current) setContextState({ circleId: active.circle.id, value: null, failed: true }); });
+      .then((payload) => {
+        if (current) {
+          setContextState({ circleId: active.circle.id, value: payload, failed: false });
+          onStatus?.({ context: payload, loading: false, failed: false });
+        }
+      })
+      .catch(() => {
+        if (current) {
+          setContextState({ circleId: active.circle.id, value: null, failed: true });
+          onStatus?.({ context: null, loading: false, failed: true });
+        }
+      });
     return () => { current = false; };
-  }, [active.circle.id]);
+  }, [active.circle.id, onStatus]);
 
   const loading = contextState?.circleId !== active.circle.id;
   const context = loading ? null : contextState?.value ?? null;
@@ -543,17 +576,57 @@ function evidenceStrength(impact: number) {
   return "需权衡";
 }
 
+function evidenceSource(evidence: RecommendationEvidence, active: Recommendation) {
+  if (evidence.axis === "commute") return active.commute.source === "amap" ? "高德路线" : "模型估算";
+  if (evidence.axis === "anchor") return "用户生活锚点";
+  return "用户取舍 × 策展特征";
+}
+
+function EvidencePassport({
+  profile,
+  active,
+  mapStatus,
+}: {
+  profile: UserProfile;
+  active: Recommendation;
+  mapStatus: MapEvidenceStatus;
+}) {
+  const addressSource = profile.officeLocation.source === "amap" ? "高德地址检索" : profile.officeLocation.id.startsWith("verified-") ? "已核验演示坐标" : "内置演示坐标";
+  const facilitySource = mapStatus.context?.sourceLabel ?? (mapStatus.failed ? "接口失败 · 未伪造点位" : "正在核验来源");
+  return <section className="evidence-passport" aria-label="推荐证据护照">
+    <header><span>证据护照</span><b>EVIDENCE PASSPORT</b><p>Evidence-backed, explainable decision — 每条结论都能追到来源与限制。</p></header>
+    <div className="passport-grid">
+      <article><i>你</i><small>用户证据</small><strong>{profile.sceneChoices.length} 组场景 · 2 段一天</strong><span>{profile.workPattern.maxCommuteMinutes} 分钟通勤底线</span></article>
+      <article><i>址</i><small>工作锚点</small><strong>{addressSource}</strong><span>精确地址不进分享封面</span></article>
+      <article><i>路</i><small>通勤证据</small><strong>{active.commute.source === "amap" ? "高德实时路线" : "模型估算"}</strong><span>{active.commute.source === "amap" ? "当前请求返回" : "不伪造精确路线"}</span></article>
+      <article><i>点</i><small>周边设施</small><strong>{facilitySource}</strong><span>{mapStatus.context ? "地图面板逐项标注" : "失败时完整降级"}</span></article>
+      <article><i>模</i><small>推荐模型</small><strong>结构化偏好排序</strong><span>用户取舍 × 策展生活圈特征</span></article>
+    </div>
+  </section>;
+}
+
+function ReplanDeltaBar({ delta }: { delta: ReplanDelta }) {
+  return <section id="replan-delta" className="replan-delta" aria-live="polite">
+    <header><div><small>REPLAN DELTA / 反驳后的即时重规划</small><strong>{delta.conditionLabel}</strong></div><p><del>{delta.beforeCondition}</del><i>→</i><ins>{delta.afterCondition}</ins></p></header>
+    <div className="replan-roles">{delta.roles.map((role) => <article key={role.role} className={role.changed ? "changed" : "stable"}><small>{role.roleLabel}</small><span><del>{role.before}</del><i>→</i><strong>{role.after}</strong></span><b>{role.changed ? "已换位" : "仍稳定"}</b></article>)}</div>
+  </section>;
+}
+
 function ResultPage({
   profile,
   result,
+  judgeMode,
+  replanDelta,
   onFeedback,
   onQuickTune,
   onRestart,
 }: {
   profile: UserProfile;
   result: RecommendationResult;
+  judgeMode: boolean;
+  replanDelta: ReplanDelta | null;
   onFeedback: (recommendation: Recommendation, evidenceIndex: number, direction: "like" | "dislike") => Promise<void>;
-  onQuickTune: (kind: "commute" | "nature" | "night") => Promise<void>;
+  onQuickTune: (kind: QuickTuneKind) => Promise<ReplanDelta | null>;
   onRestart: () => void;
 }) {
   const [activeRole, setActiveRole] = useState<Recommendation["role"]>("match");
@@ -561,6 +634,8 @@ function ResultPage({
   const [shareState, setShareState] = useState("");
   const [feedbackNote, setFeedbackNote] = useState("我先不替你下结论。看证据，哪里不像就敲我一下。");
   const [tuning, setTuning] = useState(false);
+  const [mapStatus, setMapStatus] = useState<MapEvidenceStatus>({ context: null, loading: true, failed: false });
+  const highlightReplan = Boolean(replanDelta);
   const active = result.recommendations.find((item) => item.role === activeRole) ?? result.recommendations[0];
   const hero = PROFESSION_HEROES.find((item) => item.id === profile.profession) ?? INITIAL_HERO;
   const share = async () => {
@@ -573,29 +648,38 @@ function ResultPage({
     await onFeedback(active, index, direction);
     setFeedbackNote(direction === "like" ? "重算完成。喜欢不是投票，它会真的改变推荐权重。" : "重算完成。看看前三名和妥协点有没有跟着动。");
   };
-  const tune = async (kind: "commute" | "nature" | "night") => {
+  const tune = async (kind: QuickTuneKind) => {
     setTuning(true);
     setFeedbackNote(kind === "commute" ? "把通勤绳子再收紧五分钟，看看谁会掉队。" : kind === "nature" ? "给周末多添一点风和绿，我再排一次。" : "把晚归后的吃饭和灯火往前提，我再算一次。");
-    await onQuickTune(kind);
+    const delta = await onQuickTune(kind);
     setActiveRole("match");
     setTuning(false);
-    setFeedbackNote("新一轮显影完成。城市没变，你刚刚把生活优先级说得更清楚了。");
+    setFeedbackNote(delta?.catLine ?? "新一轮显影完成。城市没变，你刚刚把生活优先级说得更清楚了。");
+    if (delta) window.requestAnimationFrame(() => {
+      document.getElementById("replan-delta")?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+        block: "start",
+      });
+    });
   };
   return <main className="result-page">
+    {judgeMode ? <section className="judge-guide judge-result-guide" aria-label="Judge mode steps two and three"><b>JUDGE MODE · STEP 2 / 3</b><span>Inspect the real map, evidence passport and an ordinary day.</span><p>最后向下点击一次 “通勤再收紧 5 分钟”，看 Agent 如何接受反驳并重规划。</p></section> : null}
     <section className="result-hero">
-      <div className="result-title"><p><span>{result.dataMode === "live" ? "高德实时通勤" : "通勤为本地估算"}</span>你的武汉生活圈已显影</p><h1>你不是在选一间房，<br />而是在选<span>普通的一天。</span></h1><blockquote>{result.afterimage.declaration}</blockquote></div>
+      <div className="result-title"><p><span>{result.dataMode === "live" ? "高德实时通勤" : "通勤为本地估算"}</span>EVIDENCE-BACKED, EXPLAINABLE DECISION</p><h1>你不是在选一间房，<br />而是在选<span>普通的一天。</span></h1><blockquote>{result.afterimage.declaration}</blockquote></div>
       <aside className="result-verdict"><small>首选生活圈 · {result.recommendations[0].roleLabel}</small><strong>{result.recommendations[0].circle.name}</strong><b>{fitLabel(result.recommendations[0].score)}</b><span>{result.code}</span></aside>
       <div className="result-facts"><span><small>通勤关系</small><b>{result.recommendations[0].commute.description}</b></span><span><small>日常半径</small><b>约 1.5 km</b></span><span><small>首要依据</small><b>{result.recommendations[0].evidence[0]?.label}</b></span></div>
     </section>
-    <section className="result-map-section"><RealLifeMap active={active} /><div className="recommendation-tabs">{result.recommendations.map((item, index) => <button key={item.role} className={item.role === activeRole ? "active" : ""} onClick={() => setActiveRole(item.role)} aria-pressed={item.role === activeRole}><i>0{index + 1}</i><span><small>{item.roleLabel}</small><strong>{item.circle.name}</strong><em>{fitLabel(item.score)}</em></span></button>)}</div></section>
-    <section className="recommendation-detail">
+    {replanDelta ? <ReplanDeltaBar delta={replanDelta} /> : null}
+    <EvidencePassport profile={profile} active={active} mapStatus={mapStatus} />
+    <section className="result-map-section"><RealLifeMap active={active} onStatus={setMapStatus} /><div className="recommendation-tabs">{result.recommendations.map((item, index) => <button key={item.role} className={[item.role === activeRole ? "active" : "", highlightReplan && replanDelta?.changedRoles.includes(item.role) ? "replan-changed" : ""].filter(Boolean).join(" ")} onClick={() => setActiveRole(item.role)} aria-pressed={item.role === activeRole}><i>0{index + 1}</i><span><small>{item.roleLabel}</small><strong>{item.circle.name}</strong><em>{fitLabel(item.score)}</em></span></button>)}</div></section>
+    <section key={`detail-${replanDelta?.id ?? "initial"}`} className={`recommendation-detail ${highlightReplan ? "replan-highlight" : ""}`}>
       <div className="circle-intro"><p>{active.roleLabel} / {active.circle.district}</p><h2>{active.circle.name}</h2><span>{active.circle.tagline}</span><div className="circle-proof"><small>生活证据</small><b>{active.circle.poi.breakfast}</b><b>{active.circle.poi.evening}</b><b>{active.circle.poi.nature}</b></div><div className="commute-chip">{active.commute.description}<small>你的上限 {profile.workPattern.maxCommuteMinutes} 分钟 · {active.commute.source === "amap" ? "高德路线" : "模型估算，不伪造路线"}</small></div><CatCompanion variant="result" line={`我会推荐这里，也会提醒你：${active.tradeoff}`} /></div>
-      <div className="evidence-panel"><div className="evidence-heading"><p>为什么是这里</p><span>扫图标、看强度，再决定像不像你</span></div>{active.evidence.map((evidence, index) => { const visual = evidenceVisual(evidence); return <article key={evidence.id} className={`evidence-card axis-${evidence.axis}`}><span className="evidence-icon">{visual.mark}</span><div className="evidence-copy"><small>{visual.short} · {evidenceStrength(evidence.impact)}</small><strong>{evidence.label}</strong><span>{evidence.detail}</span><div className="evidence-meter" role="img" aria-label={`${evidence.label}证据强度 ${evidence.impact}%`}><i style={{ width: `${evidence.impact}%` }} /></div></div><aside><button aria-label={`喜欢${evidence.label}`} onClick={() => respond(index, "like")}>喜欢</button><button aria-label={`${evidence.label}不像我`} onClick={() => respond(index, "dislike")}>不像我</button></aside></article>; })}<div className="cat-feedback"><span>潜潜追问</span><p>{feedbackNote}</p></div><div className="tradeoff"><b>它的代价</b><span>{active.tradeoff}</span></div></div>
+      <div className="evidence-panel"><div className="evidence-heading"><p>为什么是这里 / WHY HERE</p><span>扫图标、看强度，再决定像不像你</span></div>{active.evidence.map((evidence, index) => { const visual = evidenceVisual(evidence); return <article key={evidence.id} className={`evidence-card axis-${evidence.axis}`}><span className="evidence-icon">{visual.mark}</span><div className="evidence-copy"><small>{visual.short} · {evidenceStrength(evidence.impact)} <b className="evidence-source">{evidenceSource(evidence, active)}</b></small><strong>{evidence.label}</strong><span>{evidence.detail}</span><div className="evidence-meter" role="img" aria-label={`${evidence.label}证据强度 ${evidence.impact}%`}><i style={{ width: `${evidence.impact}%` }} /></div></div><aside><button aria-label={`喜欢${evidence.label}`} onClick={() => respond(index, "like")}>喜欢</button><button aria-label={`${evidence.label}不像我`} onClick={() => respond(index, "dislike")}>不像我</button></aside></article>; })}<div className="cat-feedback"><span>潜潜追问</span><p>{feedbackNote}</p></div><div className="tradeoff"><b>它的代价</b><span>{active.tradeoff}</span></div></div>
     </section>
-    <section className="day-section"><div className="day-switch"><div><p>试住 {active.circle.name}</p><h2>不是电影，是会反复发生的普通日常。</h2></div><span><button className={day === "weekday" ? "active" : ""} onClick={() => setDay("weekday")}>周中一天</button><button className={day === "weekend" ? "active" : ""} onClick={() => setDay("weekend")}>周末一天</button></span></div><DayTimeline simulation={day === "weekday" ? active.weekday : active.weekend} /></section>
-    <section className="play-again-section"><CatCompanion variant="inline" line={feedbackNote} /><div><small>结果不是终点 / 再扳动一个生活条件</small><h2>让城市再回答你一次。</h2></div><div className="tune-actions"><button disabled={tuning || profile.workPattern.maxCommuteMinutes <= 15} onClick={() => tune("commute")}><i>通</i><span><b>通勤再收紧 5 分钟</b><small>看远距离候选是否明显下降</small></span></button><button disabled={tuning} onClick={() => tune("nature")}><i>绿</i><span><b>周末多一点自然</b><small>给水边、公园和安静加权</small></span></button><button disabled={tuning} onClick={() => tune("night")}><i>夜</i><span><b>晚归也要生活在线</b><small>提高夜间餐饮和省心密度</small></span></button></div></section>
+    <section key={`day-${replanDelta?.id ?? "initial"}`} className={`day-section ${highlightReplan ? "replan-highlight" : ""}`}><div className="day-switch"><div><p>SIMULATED ORDINARY DAY · 试住 {active.circle.name}</p><h2>不是电影，是会反复发生的普通日常。</h2></div><span><button className={day === "weekday" ? "active" : ""} onClick={() => setDay("weekday")}>周中一天</button><button className={day === "weekend" ? "active" : ""} onClick={() => setDay("weekend")}>周末一天</button></span></div><DayTimeline simulation={day === "weekday" ? active.weekday : active.weekend} /></section>
+    <section className="play-again-section"><CatCompanion variant="inline" line={feedbackNote} /><div><small>{judgeMode ? "JUDGE MODE · STEP 3 / 3" : "REPLAN WHEN YOU DISAGREE"}</small><h2>让城市再回答你一次。</h2></div><div className="tune-actions"><button className={judgeMode ? "judge-action" : ""} disabled={tuning || profile.workPattern.maxCommuteMinutes <= 15} onClick={() => tune("commute")}><i>通</i><span><b>通勤再收紧 5 分钟</b><small>{judgeMode ? "CLICK TO REPLAN · 舞台动作" : "看远距离候选是否明显下降"}</small></span></button><button disabled={tuning} onClick={() => tune("nature")}><i>绿</i><span><b>周末多一点自然</b><small>给水边、公园和安静加权</small></span></button><button disabled={tuning} onClick={() => tune("night")}><i>夜</i><span><b>晚归也要生活在线</b><small>提高夜间餐饮和省心密度</small></span></button></div></section>
     <section className="share-section"><div><small>PRIVATE CITY MAGAZINE</small><h2>把这一期私人城市杂志带走。</h2><p>封面不会出现你的公司地址，只保留生活宣言、首选生活圈和一天剪影。</p></div><button className="primary-button" onClick={share}>{shareState || "生成我的杂志封面"} <span>↗</span></button><button className="back-button" onClick={onRestart}>重新试住</button></section><footer><Brand /><p>生活圈约 1.5 公里，推荐来自结构化偏好、路线估算与武汉生活设施数据。它是探索起点，不是房源或价格承诺。</p></footer>
-    <section className="privacy-disclosure"><b>这次用了什么数据？</b><span>公司地址与生活锚点只留在当前页面内存，刷新即清除。地图处会逐项标明高德实时、OpenStreetMap 或本地演示数据；只有写着“高德路线”的通勤才是实时路线，其余均为模型估算。精确公司地址不会进入分享封面或发送给叙事模型。</span></section>
+    <section className="privacy-disclosure"><b>这次用了什么数据？</b><span>公司地址与生活锚点只留在当前页面内存，刷新即清除。地图处会逐项标明高德实时、OpenStreetMap 或本地演示数据；只有写着“高德路线”的通勤才是实时路线，其余均为模型估算。精确公司地址不会进入分享封面或发送给叙事模型。本项目提供的是有证据支撑的可解释决策，不承诺“绝对最佳住处”。</span></section>
   </main>;
 }
 
@@ -606,6 +690,8 @@ export default function Home() {
   const [anchorSlots, setAnchorSlots] = useState(0);
   const [result, setResult] = useState<RecommendationResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [judgeMode, setJudgeMode] = useState(false);
+  const [replanDelta, setReplanDelta] = useState<ReplanDelta | null>(null);
   const [catLine, setCatLine] = useState("别急着答得漂亮。选那个你真的会重复过的日常。");
 
   const selectedHero = useMemo(
@@ -617,11 +703,27 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [screen, sceneIndex]);
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("judge") !== "1") return;
+    const timeout = window.setTimeout(() => {
+      const demo = judgeProfile();
+      setJudgeMode(true);
+      setProfile(demo);
+      setResult(recommendLivingCircles(demo));
+      setCatLine("Judge demo ready. 先审潜像，再揭晓地点，最后收紧一次通勤。");
+      setScreen("mirror");
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
   const reset = () => {
     setProfile(freshProfile());
     setSceneIndex(0);
     setAnchorSlots(0);
     setResult(null);
+    setReplanDelta(null);
+    setJudgeMode(false);
+    window.history.replaceState(null, "", window.location.pathname);
     setCatLine("新一局。城市很大，我们先把你的一天说清楚。");
     setScreen("intro");
   };
@@ -722,6 +824,7 @@ export default function Home() {
   };
 
   const feedback = async (recommendation: Recommendation, evidenceIndex: number, direction: "like" | "dislike") => {
+    setReplanDelta(null);
     const evidence = recommendation.evidence[evidenceIndex];
     const adjustment: FeedbackAdjustment = {
       recommendationRole: recommendation.role,
@@ -745,7 +848,9 @@ export default function Home() {
     }
   };
 
-  const quickTune = async (kind: "commute" | "nature" | "night") => {
+  const quickTune = async (kind: QuickTuneKind): Promise<ReplanDelta | null> => {
+    const previousProfile = profile;
+    const previousResult = result;
     const next: UserProfile = {
       ...profile,
       workPattern: { ...profile.workPattern },
@@ -758,47 +863,49 @@ export default function Home() {
       next.axisAdjustments.social = Math.min(24, (next.axisAdjustments.social ?? 0) + 4);
     }
     setProfile(next);
+    let nextResult: RecommendationResult;
     try {
+      if (judgeMode) throw new Error("judge mode uses a deterministic local evidence snapshot");
       const response = await fetch("/api/living-circles/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(next),
       });
       if (!response.ok) throw new Error("recalculate failed");
-      setResult((await response.json()) as RecommendationResult);
+      nextResult = (await response.json()) as RecommendationResult;
     } catch {
-      setResult(recommendLivingCircles(next));
+      nextResult = recommendLivingCircles(next);
     }
+    setResult(nextResult);
+    if (!previousResult) return null;
+    const delta = buildReplanDelta(kind, previousProfile, next, previousResult, nextResult);
+    setReplanDelta(delta);
+    return delta;
   };
 
   const loadDemo = () => {
-    const hero = PROFESSION_HEROES.find((item) => item.id === "design") ?? INITIAL_HERO;
-    const demo: UserProfile = {
-      profession: hero.id,
-      workPattern: { ...hero.defaultWork, endTime: "19:30", maxCommuteMinutes: 40 },
-      officeLocation: PRESET_PLACES[0],
-      optionalAnchors: [{ id: "demo-anchor", label: "常见的朋友", place: PRESET_PLACES[2] }],
-      sceneChoices: SCENE_DUELS.map((scene, index) => ({ sceneId: scene.id, optionId: scene.options[index % 2].id })),
-      weekdayPriorities: ["late-meal", "walk-home", "see-friend"],
-      weekendPriorities: ["slow-breakfast", "park", "exhibition"],
-      axisAdjustments: {},
-    };
+    const demo = judgeProfile();
+    setJudgeMode(true);
+    setReplanDelta(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set("judge", "1");
+    window.history.replaceState(null, "", url);
     setProfile(demo);
     setResult(recommendLivingCircles(demo));
     setCatLine("示例已装好。先审潜像，别急着被地名带跑。");
     setScreen("mirror");
   };
 
-  return <div className={`app-shell screen-${screen}`}>
-    <ShellHeader screen={screen} onReset={reset} />
+  return <div className={`app-shell screen-${screen} ${judgeMode ? "judge-mode" : ""}`}>
+    <ShellHeader screen={screen} judgeMode={judgeMode} onReset={reset} />
     {screen === "intro" ? <Intro onStart={() => setScreen("hero")} onDemo={loadDemo} /> : null}
     {screen === "hero" ? <HeroStep profile={profile} onHero={selectHero} onWork={updateWork} onNext={() => setScreen("anchors")} /> : null}
     {screen === "anchors" ? <AnchorStep profile={profile} anchorSlots={anchorSlots} onOffice={(officeLocation) => { setProfile((current) => ({ ...current, officeLocation })); setCatLine(`${officeLocation.name}钉住了。放心，它只用来算这一次。`); }} onAnchorSlots={setAnchorSlotCount} onAnchor={(index, place) => { updateAnchor(index, place); setCatLine("生活锚点也记下了。重要的人和地方，本来就会改变一座城的距离。"); }} onAnchorLabel={(index, label) => updateAnchor(index, undefined, label)} onWork={updateWork} onBack={() => setScreen("hero")} onNext={() => { setSceneIndex(0); setCatLine("现实坐标够了。现在别答道理，跟我试住几个晚上。"); setScreen("scenes"); }} /> : null}
     {screen === "scenes" ? <SceneStep profile={profile} index={sceneIndex} onChoose={(option) => chooseScene(option)} onSkip={() => chooseScene(null)} onBack={() => sceneIndex === 0 ? setScreen("anchors") : setSceneIndex((current) => current - 1)} /> : null}
     {screen === "edit" ? <EditDayStep profile={profile} onToggle={togglePriority} onBack={() => { setSceneIndex(SCENE_DUELS.length - 1); setScreen("scenes"); }} onGenerate={() => generate()} loading={loading} /> : null}
-    {screen === "mirror" && result ? <MirrorStep result={result} onAdjust={adjustAxis} onBack={() => setScreen("edit")} onReveal={reveal} /> : null}
+    {screen === "mirror" && result ? <MirrorStep result={result} judgeMode={judgeMode} onAdjust={adjustAxis} onBack={() => setScreen("edit")} onReveal={reveal} /> : null}
     {screen === "developing" ? <Developing /> : null}
-    {screen === "result" && result ? <ResultPage profile={profile} result={result} onFeedback={feedback} onQuickTune={quickTune} onRestart={reset} /> : null}
+    {screen === "result" && result ? <ResultPage profile={profile} result={result} judgeMode={judgeMode} replanDelta={replanDelta} onFeedback={feedback} onQuickTune={quickTune} onRestart={reset} /> : null}
     {!["intro", "developing", "result"].includes(screen) ? <CatCompanion line={catLine} /> : null}
     <span className="sr-only" aria-live="polite">当前职业英雄：{selectedHero.title}</span>
   </div>;
