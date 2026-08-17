@@ -42,3 +42,11 @@ next-env.d.ts
 /.wrangler/
 /outputs/
 /work/
+
+# generated submission-video working files
+/video/pitch/audio/
+/video/pitch/captions/
+/video/pitch/qa/
+/video/pitch/slides/
+/video/pitch/work/
+/video/pitch/contact-sheet.png

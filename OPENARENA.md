@@ -19,6 +19,12 @@ https://city-afterimage-lab.bigdraw123.chatgpt.site/
 **90-second judge mode**  
 https://city-afterimage-lab.bigdraw123.chatgpt.site/?judge=1
 
+**90-second pitch video**
+https://city-afterimage-lab.bigdraw123.chatgpt.site/video-pitch/watch.html
+
+**Direct MP4, if the form requires a file URL**
+https://city-afterimage-lab.bigdraw123.chatgpt.site/video-pitch/city-afterimage-openarena-90s.mp4
+
 **Public repository**  
 https://github.com/leinstein908/city-afterimage
 

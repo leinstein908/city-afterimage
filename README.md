@@ -6,7 +6,7 @@
 
 City Afterimage is an explainable relocation decision agent for people starting a life in an unfamiliar city. Instead of asking users to describe an “ideal neighborhood,” it lets them choose between concrete life scenes, edit the resulting lifestyle profile before any place name is revealed, and then connects that profile to map evidence and three distinct Wuhan living-circle recommendations.
 
-[**Live demo**](https://city-afterimage-lab.bigdraw123.chatgpt.site/) · [**90-second judge mode**](https://city-afterimage-lab.bigdraw123.chatgpt.site/?judge=1) · [OpenArena submission kit](./OPENARENA.md) · [中文说明](#中文说明)
+[**Live demo**](https://city-afterimage-lab.bigdraw123.chatgpt.site/) · [**90-second pitch video**](https://city-afterimage-lab.bigdraw123.chatgpt.site/video-pitch/watch.html) · [**Judge mode**](https://city-afterimage-lab.bigdraw123.chatgpt.site/?judge=1) · [OpenArena submission kit](./OPENARENA.md) · [中文说明](#中文说明)
 
 ![City Afterimage visual preview](./public/og.png)
 
